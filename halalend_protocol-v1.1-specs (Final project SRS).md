@@ -75,45 +75,80 @@ There are 3 contracts in the add liquidity feature:
 --------
 
 #### 3.3.2 Collateral Validator
--------------------
+Collateral Validator is a lock script that locks a utxo containing the collateral that a user provides.
+The locked collateral is provided as a transaction input and reference script during liquidation or when a user
+wants to repay their borrowed loan
 ##### 3.3.2.1 Parameter
---------
+None
 ##### 3.3.2.2 Datum
---------
+- CollateralDatum:
+    - owner: the lending protocol's verification key hash
+    - beneficiary: the beneficiary's / locker's verification key hash
+    - assets_locked: list of asset name and value locked
 ##### 3.3.2.3 Redeemer
---------
+- LiquidateCollateral
+- RepayLoan
 ##### 3.3.2.4 Validation
---------
+- LiquidateCollateral: the redeemer will allow spending the UTxO and return change back to the user
+    - validate that the UTxO can be spent if the liquidation threshold is reached
+- RepayLoan: the redeemer will allow spending the UTxO by the user
+    - validate that the UTxO can be spent if the user returns the exact amount of loan borrowed
 
 #### 3.3.3 NFT Minting Validator
--------------------
+NFT Minting Validator is responsible for creating the loan NFT
 ##### 3.3.3.1 Parameter
---------------
+- out_ref: is a reference of a UTxO which will only be spent on `NFTMintingRedeemer` redeemer to make sure this redeemer can only be called once
 ##### 3.3.3.2 Minting Purpose
---------------
 ###### 3.3.3.2.1 Redeemer
---------
+- CheckMint
+- CheckBurn
 ###### 3.3.3.2.2 Validation
---------
+- CheckMint: the redeemer can be called once to mint the loan NFT
+    - validate that the `out_ref` must be presented in the transaction inputs
+    - validate that the redeemer only mint:
+        - a single loan NFT
+    - validate that there's only one loan UTxO in the transaction outputs. The loan UTxO must contain in it's value, 1 and it's datum:
+        - beneficiary: `VerificationKeyHash`,
+        - loan_amount: `Int`
+- CheckBurn: the redeemer can be called once to burn the loan NFT
+    - validate that the redeemer only burn:
+        - a single loan NFT
+    - validate that there's only one loan UTxO in the transaction input. The loan UTxO must contain in it's value, 1 and it's datum:
+        - beneficiary: `VerificationKeyHash`,
+        - loan_amount: `Int`
 ##### 3.3.3.3 Spend Purpose
---------------
 ###### 3.3.3.3.1 Datum
---------
+- beneficiary: `VerificationKeyHash`,
+- loan_amount: `Int`
 ###### 3.3.3.3.2 Redeemer
---------
+- Nothing
 ###### 3.3.3.3.3 Validation
---------
+- validate that the transaction has to be executed by the beneficiary
+- validate transaction won't mint anything
 
 #### 3.3.4 Protocol Parameter Validator
--------------------
+Protocol Parameter Validator is responsible for providing the parameters of `Halalend protocol` like the MCR, and CR
 ##### 3.3.4.1 Parameter
---------
+None
 ##### 3.3.4.2 Datum
---------
+- ProtocolParameterDatum:
+    - cr: the collateralization ratio
+    - lq: liquidation threshold
+    - mla: minimum loan amounts
+    - lt: loan terms
+    - lp: liquidation penalty
+    - rt: reserve threshold
+    - rr: reserve ratios
+    - gtp: governance token parameters
+    - ltv: maximum loan to value ratios
 ##### 3.3.4.3 Redeemer
---------
+None
 ##### 3.3.4.4 Validation
---------
+- validate that the collateralization ratio satisfies the requirement for the user to borrow
+- validate that the user's collateral is not at or lower than the liquidation threshold
+- validate that the loan amount a user wants to borrow is up to the minmum loan amount
+- validate that the loan conforms to the loan terms
+- validate that the user loan amount and collateral doesn't exceed the maximum loan to value ratio
 
 ### 3.4 Transaction
 
