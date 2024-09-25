@@ -64,15 +64,18 @@ There are 3 contracts in the add liquidity feature:
 ### 3.3 Smart Contract
 
 #### 3.3.1 Lending Protocol Validator
--------------------
+Lending Protocol Validator is a validator that holds the liquidity of the protocol. It returns a UTxO containing the liquidty that can be spent from
 ##### 3.3.1.1 Parameter
---------
+None
 ##### 3.3.1.2 Datum
---------
+- LendingProtocolDatum:
+    - spender: the entity who can spend from the liquidity
 ##### 3.3.1.3 Redeemer
---------
+None
 ##### 3.3.1.4 Validation
---------
+- validate that enough liquidity is available to be spent
+- validate that `spender` can spend from the liquidity
+- validate that a transaction adheres to the protocol rules
 
 #### 3.3.2 Collateral Validator
 Collateral Validator is a lock script that locks a utxo containing the collateral that a user provides.
@@ -108,17 +111,18 @@ NFT Minting Validator is responsible for creating the loan NFT
     - validate that the redeemer only mint:
         - a single loan NFT
     - validate that there's only one loan UTxO in the transaction outputs. The loan UTxO must contain in it's value, 1 and it's datum:
-        - beneficiary: `VerificationKeyHash`,
+        - beneficiary: `VerificationKeyHash`
         - loan_amount: `Int`
 - CheckBurn: the redeemer can be called once to burn the loan NFT
+    - validate that the `out_ref` must presented in the transaction inputs (which is the NFT)
     - validate that the redeemer only burn:
         - a single loan NFT
     - validate that there's only one loan UTxO in the transaction input. The loan UTxO must contain in it's value, 1 and it's datum:
-        - beneficiary: `VerificationKeyHash`,
+        - beneficiary: `VerificationKeyHash`
         - loan_amount: `Int`
 ##### 3.3.3.3 Spend Purpose
 ###### 3.3.3.3.1 Datum
-- beneficiary: `VerificationKeyHash`,
+- beneficiary: `VerificationKeyHash`
 - loan_amount: `Int`
 ###### 3.3.3.3.2 Redeemer
 - Nothing
@@ -152,40 +156,100 @@ None
 
 ### 3.4 Transaction
 
-#### 3.4.1 `Transaction 1 Name`
---------------------------
+#### 3.4.1 Add Liquidity
+Adds liquidity to the protocol.<br /><br />Transaction requires spending an UTxO provided by a user intending to add liquidity
 Transaction structure:
 - Inputs:
-    - `The input`
-- Mint:
-    - `Minting Policy Name`:
-        - Redeemer: ------
-        - Value:
-            - `values`
-            - `values`
+    - Liquidity UTxO from the user
+    - Liquidity transaction input and reference script from the `Lending Protocol Validator`
 - Outputs:
-    - `The utxos...`:
-        - Address: ----
-        - Datum: ------
+    - Updated Liquidity UTxO:
+        - Address: Liquidity Address
+        - Datum:
+            - spender: the entity who can spend from liquidity
         - Value:
-            - `values`
-            - `values`
+            - Stable coin balance left
+    - LP (Liquidity Pool) Tokens:
+        - Address: User's wallet address
 
-#### 3.4.2 `Transaction 2 Name`
---------------------------
+#### 3.4.2 Borrow
+User borrows from the protocol.<br /><br />Transaction requires spending an UTxO provided by a user intending to borrow, input of liquidity, nft script, reference to the protocol parameters, and reference to dex exchange rates
 Transaction structure:
 - Inputs:
-    - `The input`
+    - Borrow UTxO from user
+    - Liquidity transaction input and reference script from the `Lending Protocol Validator`
+    - Reference script from the `NFT Minting Validator`
+    - Reference transaction input from the `Protocol Parameter Validator`
+    - Reference transaction input from the dex for rates
 - Mint:
-    - `Minting Policy Name`:
-        - Redeemer: ------
+    - Script NFT Minting Policy:
+        - Redeemer: CheckMint
         - Value:
-            - `values`
-            - `values`
+            - 1 Loan NFT Asset
 - Outputs:
-    - `The utxos...`:
-        - Address: ----
-        - Datum: ------
+    - Loan NFT UTxO:
+        - Address: User wallet address
+        - Datum:
+            - beneficiary: `VerificationKeyHash`
+            - loan_amount: `Int`
         - Value:
-            - `values`
-            - `values`
+            - Loan Amount
+            - 1 Loan NFT Asset
+    - Collateral UTxO:
+        - Address: Collateral Validator address
+        - Datum:
+            - owner: the lending protocol's verification key hash
+            - beneficiary: the beneficiary's / locker's verification key hash
+            - assets_locked: list of asset name and value locked
+        - Value:
+            - Assets locked
+    - Updated Liquidity UTxO:
+        - Address: Liquidity Address
+        - Datum:
+            - spender: the entity who can spend from liquidity
+        - Value:
+            - Stable coin balance left
+    - Fees UTxO
+
+#### 3.4.3 Liquidation
+Liquidates the users collateral if it reaches the `collateral threshold`<br /><br />Transaction requires input of collateral validator, input of liquidity, reference to the protocol parameters, and reference to dex exchange rates
+Transaction structure:
+- Inputs:
+    - Liquidity transaction input and reference script from the `Lending Protocol Validator`
+    - Collateral transaction input and reference script from the `Collateral Validator`
+    - Reference transaction input from the `Protocol Parameter Validator`
+    - Reference transaction input from the dex for rates
+- Outputs:
+    - Remaining collateral:
+        - Address: User wallet address
+        - Value:
+            - remaining collateral
+    - Fees and collateral equivalent to loan value created
+
+#### 3.4.4 Repayment
+User repays borrowed funds
+Transaction structure:
+- Inputs:
+    - Repayment UTxO from User
+- Mint:
+    - Script NFT Minting Policy:
+        - Redeemer: CheckMint
+        - Value:
+            - 1 Loan NFT Asset
+- Outputs:
+    - Collateral amount UTxO:
+        - Address: User's wallet address
+        - Datum:
+            - owner: the lending protocol's verification key hash
+            - beneficiary: the beneficiary's / locker's verification key hash
+            - assets_locked: list of asset name and value locked
+        - Value:
+            - minus 1 Loan NFT Asset
+            - Loan Amount
+    - Updated Liquidity UTxO:
+        - Address: Liquidity Address
+        - Datum:
+            - spender: the entity who can spend from liquidity
+        - Value:
+            - Stable coin balance left
+    - Fees UTxO
